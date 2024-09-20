@@ -96,3 +96,75 @@ Tanks follow a structured upgrade path:
 ---
 
 ### Now, after implementing knowledge base, let's implement queries for it
+
+
+#### 1. **Simple Queries to Search for Facts**
+
+```prolog
+% Find all Tier 2 tanks:
+?- tank(Tank), upgrade(Tank, basic).
+
+% Check if `sniper` can be upgraded:
+?- can_upgrade(sniper, UpgradedTank).
+
+% Get all available upgrades for the `machine_gun` tank:
+?- upgrades(machine_gun, UpgradedTanks).
+```
+
+#### 2. **Queries Using Logical Operators**
+
+```prolog
+% Find all tanks with bullet damage (bullet_damage) greater than or equal to 4 and movement speed (movement_speed) greater than or equal to 4:
+?- property(Tank, stats(_, _, _, _, _, bullet_damage(BD), _, movement_speed(MS), _)), BD >= 4, MS >= 4.
+
+% Find all tanks that do not have an upgrade:
+?- tank(Tank), \+ upgrade(_, Tank).
+
+% Find tanks with max health (max_health >= 5) or high reload speed (reload >= 5):
+?- property(Tank, stats(_, max_health(MH), _, _, _, _, reload(RS), _, _)), (MH >= 5 ; RS >= 5).
+```
+
+#### 3. **Queries Using Variables to Search for Objects with Certain Characteristics**
+
+```prolog
+% Find all tanks with minimal requirements: movement speed >= 3, bullet damage >= 3, reload speed >= 3:
+?- find_avg_shit(3, 3, 3, Tank).
+
+% Find all tanks with the highest bullet speed:
+?- max_bullet_speed(Tank).
+
+% Find all tanks with the highest total sum of all stats:
+?- max_overall_stats(Tank).
+```
+
+#### 4. **Queries that Require Rule Execution**
+
+```prolog
+% Find the slowest tank (with the minimum movement speed):
+?- slowest(Tank).
+
+% Find the tank with the highest health-to-speed ratio:
+?- energizer(Tank).
+
+% Get the full upgrade path for the `basic` tank:
+?- upgrade_path(basic, Path).
+
+% Find the tank with the highest body damage:
+?- max_body_damage(Tank).
+
+% Find the most balanced tank (where the difference between all stats is within 1):
+?- most_balanced(Tank).
+```
+
+#### Additional Queries:
+
+```prolog
+% Check if `machine_gun` can be upgraded to `gunner`:
+?- can_upgrade(machine_gun, gunner).
+
+% Find all tanks that can be upgraded from `basic`:
+?- upgrades(basic, UpgradedTanks).
+
+% Check which tier the `sniper` tank belongs to:
+?- find_tier(sniper, Tier).
+```
