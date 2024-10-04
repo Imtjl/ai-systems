@@ -173,7 +173,7 @@ max_body_damage(Tank) :-
 
 % Finds a tank with stats within 1 point of each other
 most_balanced(Tank) :-
-    property(Tank, stats(HealthRegen, MaxHealth, BodyDamage, BulletSpeed, BulletPenetration, BulletDamage, Reload, MovementSpeed, _)),
+    property(Tank, stats(health_regen(HealthRegen), max_health(MaxHealth), body_damage(BodyDamage), bullet_speed(BulletSpeed), bullet_penetration(BulletPenetration), bullet_damage(BulletDamage), reload(Reload), movement_speed(MovementSpeed))),
     Diff1 is abs(HealthRegen - MaxHealth),
     Diff2 is abs(MaxHealth - BodyDamage),
     Diff3 is abs(BodyDamage - BulletSpeed),
@@ -186,9 +186,9 @@ most_balanced(Tank) :-
 
 % Calculates a sum of all stat values, returns tank with highest sum
 max_overall_stats(Tank) :-
-    property(Tank, stats(HealthRegen, MaxHealth, BodyDamage, BulletSpeed, BulletPenetration, BulletDamage, Reload, MovementSpeed, _)),
+    property(Tank, stats(health_regen(HealthRegen), max_health(MaxHealth), body_damage(BodyDamage), bullet_speed(BulletSpeed), bullet_penetration(BulletPenetration), bullet_damage(BulletDamage), reload(Reload), movement_speed(MovementSpeed))),
     Total is HealthRegen + MaxHealth + BodyDamage + BulletSpeed + BulletPenetration + BulletDamage + Reload + MovementSpeed,
-    \+ (property(_, stats(HR, MH, BD, BS, BP, BDam, R, MS, _)),
+    \+ (property(_, stats(health_regen(HR), max_health(MH), body_damage(BD), bullet_speed(BS), bullet_penetration(BP), bullet_damage(BDam), reload(R), movement_speed(MS))),
         SumOther is HR + MH + BD + BS + BP + BDam + R + MS, SumOther > Total),
     !.
 
@@ -202,7 +202,7 @@ energizer(Tank) :-
 
 % Finds a tank with a minimum requirements from user input
 find_avg_shit(RequiredMovementSpeed, RequiredBulletDamage, RequiredReload, Tank) :-
-    property(Tank, stats(_, _, _, _, _, bullet_damage(BD), reload(RS), movement_speed(MS), _)),
+    property(Tank, stats(_, _, _, _, _, bullet_damage(BD), reload(RS), movement_speed(MS))),
     MS >= RequiredMovementSpeed,
     BD >= RequiredBulletDamage,
     RS >= RequiredReload.
@@ -229,33 +229,73 @@ upgrade_path_recursive(Tank, Acc, Path) :-
     \+ upgrade(_, Tank),            % Base case: no more upgrades available
     reverse(Acc, Path).             % Reverse the accumulated list to get the correct path
 
-% Правило для определения, подходит ли танк под определенный стиль игры
-suitable_for_play_style(Tank, aggressive) :-
-    property(Tank, stats(_, _, BodyDamage, _, _, BulletDamage, Reload, MovementSpeed, _)),
-    TotalAttack is BodyDamage + BulletDamage + Reload,
-    TotalAttack >= 12,
-    MovementSpeed >= 4.
+suitable_for_play_style(TankList, aggressive) :-
+    findall(TotalAttack-Speed-T, (
+        property(T, stats(_, _, body_damage(BodyDamage), _, _, bullet_damage(BulletDamage), reload(Reload), movement_speed(Speed), _)),
+        TotalAttack is BodyDamage + BulletDamage + Reload,
+        Speed >= 4
+    ), AttackList),
+    sort(0, @>=, AttackList, SortedAttackList),
+    findall(Tank, member(_-_-Tank, SortedAttackList), TankList).
 
-suitable_for_play_style(Tank, defensive) :-
-    property(Tank, stats(HealthRegen, MaxHealth, _, _, BulletPenetration, _, _, _, _)),
-    TotalDefense is HealthRegen + MaxHealth + BulletPenetration,
-    TotalDefense >= 12.
+suitable_for_play_style(TankList, defensive) :-
+    findall(TotalDefense-T, (
+        property(T, stats(health_regen(HealthRegen), max_health(MaxHealth), _, _, bullet_penetration(BulletPenetration), _, _, _, _)),
+        TotalDefense is HealthRegen + MaxHealth + BulletPenetration
+    ), DefenseList),
+    sort(0, @>=, DefenseList, SortedDefenseList),
+    findall(Tank, member(_-Tank, SortedDefenseList), TankList).
 
-suitable_for_play_style(Tank, balanced) :-
-    property(Tank, stats(HealthRegen, MaxHealth, BodyDamage, BulletSpeed, BulletPenetration, BulletDamage, Reload, MovementSpeed, _)),
-    Stats = [HealthRegen, MaxHealth, BodyDamage, BulletSpeed, BulletPenetration, BulletDamage, Reload, MovementSpeed],
-    max_member(MaxStat, Stats),
-    min_member(MinStat, Stats),
-    Diff is MaxStat - MinStat,
-    Diff =< 2.
+suitable_for_play_style(TankList, balanced) :-
+    findall(Diff-Tank, (
+        property(Tank, stats(
+            health_regen(HealthRegen),
+            max_health(MaxHealth),
+            body_damage(BodyDamage),
+            bullet_speed(BulletSpeed),
+            bullet_penetration(BulletPenetration),
+            bullet_damage(BulletDamage),
+            reload(Reload),
+            movement_speed(MovementSpeed)
+            % Include field_of_view(_) if necessary
+        )),
+        Stats = [HealthRegen, MaxHealth, BodyDamage, BulletSpeed, BulletPenetration, BulletDamage, Reload, MovementSpeed],
+        max_list(Stats, MaxStat),
+        min_list(Stats, MinStat),
+        Diff is MaxStat - MinStat
+    ), BalancedList),
+    keysort(BalancedList, SortedBalancedList),
+    pairs_values(SortedBalancedList, TankList).
 
-% Правило для определения, подходит ли танк под заданные предпочтения по статистикам
-suitable_for_stats(Tank, StatsPreferences) :-
-    property(Tank, stats(_, MaxHealth, _, _, _, BulletDamage, _, MovementSpeed, _)),
-    (   member(speed, StatsPreferences) -> MovementSpeed >= 4 ; true),
-    (   member(damage, StatsPreferences) -> BulletDamage >= 4 ; true),
-    (   member(health, StatsPreferences) -> MaxHealth >= 4 ; true).
+% Collects the best tanks based on multiple playstyles
+mixed_playstyles_tanks(PlayStyles, TankList) :-
+    findall(Tank, tank(Tank), AllTanks),
+    find_tank_scores(AllTanks, PlayStyles, TankScores),
+    sort(0, @>=, TankScores, SortedTankScores),
+    findall(Tank, member(_-Tank, SortedTankScores), TankList).
 
-% Правило для поиска всех танков, подходящих под стиль игры и предпочтения по статистикам
-find_suitable_tanks(PlayStyle, StatsPreferences, Tanks) :-
-    findall(Tank, (tank(Tank), suitable_for_play_style(Tank, PlayStyle), suitable_for_stats(Tank, StatsPreferences)), Tanks).
+% Calculates scores for each tank based on playstyles
+find_tank_scores([], _, []).
+
+find_tank_scores([Tank|RestTanks], PlayStyles, [Score-Tank|RestScores]) :-
+    compute_tank_score(Tank, PlayStyles, Score),
+    find_tank_scores(RestTanks, PlayStyles, RestScores).
+
+% Computes the score of a tank based on its rank in each playstyle
+compute_tank_score(Tank, PlayStyles, TotalScore) :-
+    findall(SingleScore, (
+        member(PlayStyle, PlayStyles),
+        get_tank_rank_in_playstyle(Tank, PlayStyle, Rank),
+        % Invert rank to score: higher rank (lower number) gets higher score
+        SingleScore is 1 / Rank
+    ), Scores),
+    sum_list(Scores, TotalScore).
+
+% Retrieves the rank of a tank in a given playstyle
+get_tank_rank_in_playstyle(Tank, PlayStyle, Rank) :-
+    suitable_for_play_style(TankList, PlayStyle),
+    (   nth1(Rank, TankList, Tank)
+    ->  true
+    ;   length(TankList, Length),
+        Rank is Length + 1  % Assign lowest priority if tank is not in the list
+    ).
