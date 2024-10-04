@@ -1,5 +1,4 @@
 from pyswip import Prolog
-import re
 
 # Инициализация Prolog
 prolog = Prolog()
@@ -8,12 +7,59 @@ prolog.consult("knowledge_base.pl")  # Загрузка базы знаний
 
 def start():
     print("Hi! I will help you to choose a tank in diep.io")
-    print("Please, tell me about your preferences :D")
-    age_group = ask_age()
-    play_style = ask_play_style()
-    stats_preferences = ask_preferred_stats()
-    recommended_tanks = find_tanks(play_style, stats_preferences)
-    present_recommendations(recommended_tanks)
+    while True:
+        print("\nPlease select an option:")
+        print("1. Find tanks based on your preferences")
+        print("2. Find the slowest tank")
+        print("3. Find the tank with highest body damage")
+        print("4. Find the most balanced tank")
+        print("5. Find the tank with highest overall stats")
+        print("6. Find the tank with highest health to speed ratio")
+        print("7. Find tanks that meet your minimum requirements")
+        print("8. Find upgrade path for a tank")
+        print("9. Exit")
+
+        choice = input("Enter the number of your choice: ").strip()
+
+        if choice == "1":
+            age_group = ask_age()
+            play_styles = ask_play_style()
+            stats_preferences = ask_preferred_stats()
+            recommended_tanks = find_tanks(play_styles, age_group, stats_preferences)
+            present_recommendations(recommended_tanks)
+        elif choice == "2":
+            tank = find_slowest_tank()
+            print(f"The slowest tank is: {tank}")
+        elif choice == "3":
+            tank = find_max_body_damage_tank()
+            print(f"The tank with highest body damage is: {tank}")
+        elif choice == "4":
+            tank = find_most_balanced_tank()
+            print(f"The most balanced tank is: {tank}")
+        elif choice == "5":
+            tank = find_max_overall_stats_tank()
+            print(f"The tank with the highest overall stats is: {tank}")
+        elif choice == "6":
+            tank = find_energizer_tank()
+            print(f"The tank with the highest health to speed ratio is: {tank}")
+        elif choice == "7":
+            min_requirements = ask_min_requirements()
+            tanks = find_tanks_with_min_requirements(min_requirements)
+            present_recommendations(tanks)
+        elif choice == "8":
+            tank_name = input(
+                "Enter the name of the tank to find its upgrade path: "
+            ).strip()
+            path = find_upgrade_path(tank_name)
+            if path:
+                print(f"The upgrade path for {tank_name} is: {' -> '.join(path)}")
+            else:
+                print(f"No upgrade path found for {tank_name}")
+        elif choice == "9":
+            print("Goodbye!")
+            break
+        else:
+            print("Invalid choice. Please try again.")
 
 
 def ask_age():
@@ -42,22 +88,50 @@ def ask_age():
 
 
 def ask_play_style():
-    play_style_input = input(
-        "What is your game style? (aggressive(a)/defensive(d)/balanced(b)) "
-    )
-    lower_input = play_style_input.lower()
-    if lower_input in ["aggressive", "a"]:
-        return "aggressive"
-    elif lower_input in ["defensive", "d"]:
-        return "defensive"
-    elif lower_input in ["balanced", "b"]:
-        return "balanced"
-    elif lower_input == "":
-        print("  Is your keyboard broken? Then type something you idiot")
-        ask_play_style()
-    else:
-        print("  There is no style like this you dork")
-        ask_play_style()
+    # Define valid playstyle options
+    playstyle_options = {"a": "aggressive", "d": "defensive", "b": "balanced"}
+
+    selected_playstyles = set()
+
+    while True:
+        # Prompt the user for input
+        play_style_input = (
+            input(
+                "What is your game style? \n(aggressive(a)/defensive(d)/balanced(b), you can choose multiple separated by commas) "
+            )
+            .strip()
+            .lower()
+        )
+
+        # Check for empty input
+        if not play_style_input:
+            print("Is your keyboard broken? Then type something you idiot.")
+            continue  # Prompt again
+
+        # Split the input by commas and remove any extra spaces
+        inputs = [s.strip() for s in play_style_input.split(",")]
+
+        # Validate and map inputs to playstyles
+        invalid_inputs = []
+        for inp in inputs:
+            if inp in playstyle_options:
+                selected_playstyles.add(playstyle_options[inp])
+            elif inp in playstyle_options.values():
+                selected_playstyles.add(inp)
+            else:
+                invalid_inputs.append(inp)
+
+        if invalid_inputs:
+            print(f"Invalid input(s): {', '.join(invalid_inputs)}. Please try again.")
+            continue  # Prompt again
+
+        if selected_playstyles:
+            print(
+                f"You have selected the following play styles: {', '.join(selected_playstyles)}.\n"
+            )
+            return list(selected_playstyles)
+        else:
+            print("You must select at least one play style.")
 
 
 def ask_preferred_stats():
@@ -127,16 +201,159 @@ def ask_preferred_stats():
                 print("Invalid input. Please enter 'y' for yes or 'n' for no.\n")
 
 
-def find_tanks(play_style, stats_preferences):
-    # stats_prefs_prolog = '[' + ','.join(stats_preferences) + ']'
-    # query = f"find_suitable_tanks({play_style}, {stats_prefs_prolog}, Tanks)"
-    query = "upgrades(twin, Tanks)."
+def find_tanks(play_styles, game_preferences, stats_preferences):
+    # Ensure play_styles is a list
+    if not isinstance(play_styles, list):
+        play_styles = [play_styles]
+
+    # Convert play_styles to Prolog list format
+    play_styles_prolog = "[" + ",".join(play_styles) + "]"
+
+    # Formulate the Prolog query
+    query = f"mixed_playstyles_tanks({play_styles_prolog}, TankList)"
+
+    # Execute the query and collect results
     result = list(prolog.query(query))
-    print(result)
     if result:
-        return [str(tank) for tank in result[0]["Tanks"]]
+        # Extract the TankList from the result
+        tank_list = result[0]["TankList"]
+        # Convert Prolog atoms to strings
+        tanks = [str(tank) for tank in tank_list]
+        top_tanks = tanks[:5]
+        return top_tanks
     else:
         return []
+
+
+def suitable_for_stats(tank, stats_preferences):
+    stats = get_tank_stats(tank)
+    if not stats:
+        return False
+    stats_map = {
+        "speed": stats.get("movement_speed", 0),
+        "damage": stats.get("bullet_damage", 0),
+        "health": stats.get("max_health", 0),
+    }
+    for pref in stats_preferences:
+        if stats_map.get(pref, 0) < 4:
+            return False
+    return True
+
+
+def get_tank_stats(tank):
+    query = f"property({tank}, stats(health_regen(HR), max_health(MH), body_damage(BD), bullet_speed(BS), bullet_penetration(BP), bullet_damage(BDam), reload(RL), movement_speed(MS)))"
+    for sol in prolog.query(query):
+        stats = {
+            "health_regen": int(sol.get("HR", 0)),
+            "max_health": int(sol.get("MH", 0)),
+            "body_damage": int(sol.get("BD", 0)),
+            "bullet_speed": int(sol.get("BS", 0)),
+            "bullet_penetration": int(sol.get("BP", 0)),
+            "bullet_damage": int(sol.get("BDam", 0)),
+            "reload": int(sol.get("RL", 0)),
+            "movement_speed": int(sol.get("MS", 0)),
+        }
+        return stats
+    return None
+
+
+def present_recommendations(tanks):
+    if not tanks:
+        print("You better lower your standards!")
+    else:
+        print("Top-5 recommended tanks for you:")
+        for tank in tanks:
+            print(f"- {tank}")
+
+
+def find_slowest_tank():
+    query = "slowest(Tank)"
+    result = list(prolog.query(query))
+    if result:
+        tank = result[0]["Tank"]
+        return str(tank)
+    else:
+        return "No tank found."
+
+
+def find_max_body_damage_tank():
+    query = "max_body_damage(Tank)"
+    result = list(prolog.query(query))
+    if result:
+        tank = result[0]["Tank"]
+        return str(tank)
+    else:
+        return "No tank found."
+
+
+def find_most_balanced_tank():
+    query = "most_balanced(Tank)"
+    result = list(prolog.query(query))
+    if result:
+        tank = result[0]["Tank"]
+        return str(tank)
+    else:
+        return "No tank found."
+
+
+def find_max_overall_stats_tank():
+    query = "max_overall_stats(Tank)"
+    result = list(prolog.query(query))
+    if result:
+        tank = result[0]["Tank"]
+        return str(tank)
+    else:
+        return "No tank found."
+
+
+def find_energizer_tank():
+    query = "energizer(Tank)"
+    result = list(prolog.query(query))
+    if result:
+        tank = result[0]["Tank"]
+        return str(tank)
+    else:
+        return "No tank found."
+
+
+def ask_min_requirements():
+    while True:
+        try:
+            min_speed = int(input("Enter minimum movement speed (0-7): "))
+            min_damage = int(input("Enter minimum bullet damage (0-7): "))
+            min_reload = int(input("Enter minimum reload (0-7): "))
+            if 0 <= min_speed <= 7 and 0 <= min_damage <= 7 and 0 <= min_reload <= 7:
+                return {
+                    "movement_speed": min_speed,
+                    "bullet_damage": min_damage,
+                    "reload": min_reload,
+                }
+            else:
+                print("Values must be between 0 and 7. Please try again.")
+        except ValueError:
+            print("Invalid input. Please enter integer values.")
+
+
+def find_tanks_with_min_requirements(min_requirements):
+    ms = min_requirements["movement_speed"]
+    bd = min_requirements["bullet_damage"]
+    rl = min_requirements["reload"]
+    query = f"find_avg_shit({ms}, {bd}, {rl}, Tank)"
+    result = list(prolog.query(query))
+    tanks = [str(sol["Tank"]) for sol in result]
+    return tanks
+
+
+def find_upgrade_path(tank_name):
+    tank_name_prolog = f"'{tank_name}'"
+    query = f"upgrade_path({tank_name_prolog}, Path)"
+    result = list(prolog.query(query))
+    if result:
+        path = result[0]["Path"]
+        path = [str(t) for t in path]
+        return path
+    else:
+        return None
 
 
 def suitable_for_play_style(tank, play_style):
@@ -203,9 +420,9 @@ def get_stat_names(tank):
 
 def present_recommendations(tanks):
     if not tanks:
-        print("К сожалению, не нашлось танков, соответствующих твоим предпочтениям.")
+        print("You better lower your standarts bruh!")
     else:
-        print("Рекомендуемые танки для тебя:")
+        print("Top-5 recommended tanks for you, brother:")
         for tank in tanks:
             print(f"- {tank}")
 
